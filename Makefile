@@ -1,5 +1,5 @@
 #
-# Created by gmakemake (Ubuntu Jul 25 2014) on Thu Nov 14 21:06:27 2019
+# Created by gmakemake (Ubuntu Jul 25 2014) on Tue Nov 26 14:25:11 2019
 #
 
 #
@@ -45,15 +45,15 @@ CPP = $(CPP) $(CPPFLAGS)
 CXXFLAGS =	-ggdb
 CFLAGS =	-ggdb
 CLIBFLAGS =	-lm
-CCLIBFLAGS =	
+CCLIBFLAGS = -lpthread	
 ########## End of default flags
 
 
-CPP_FILES =	server.cpp
+CPP_FILES =	fileShare.cpp
 C_FILES =	
 PS_FILES =	
 S_FILES =	
-H_FILES =	server.h
+H_FILES =	fileShare.h
 SOURCEFILES =	$(H_FILES) $(CPP_FILES) $(C_FILES) $(S_FILES)
 .PRECIOUS:	$(SOURCEFILES)
 OBJFILES =	
@@ -62,16 +62,16 @@ OBJFILES =
 # Main targets
 #
 
-all:	server 
+all:	fileShare 
 
-server:	server.o $(OBJFILES)
-	$(CXX) $(CXXFLAGS) -o server server.o $(OBJFILES) $(CCLIBFLAGS)
+fileShare:	fileShare.o $(OBJFILES)
+	$(CXX) $(CXXFLAGS) -o fileShare fileShare.o $(OBJFILES) $(CCLIBFLAGS)
 
 #
 # Dependencies
 #
 
-server.o:	server.h
+fileShare.o:	fileShare.h
 
 #
 # Housekeeping
@@ -83,7 +83,7 @@ archive.tgz:	$(SOURCEFILES) Makefile
 	tar cf - $(SOURCEFILES) Makefile | gzip > archive.tgz
 
 clean:
-	-/bin/rm -f $(OBJFILES) server.o core
+	-/bin/rm -f $(OBJFILES) fileShare.o core
 
 realclean:        clean
-	-/bin/rm -f server 
+	-/bin/rm -f fileShare 
