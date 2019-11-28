@@ -15,24 +15,27 @@
 #include <sys/socket.h>
 #define COMM_PORT 12000
 #define NUM_THREADS 2
-
-typedef void * (*THREADFUNCPTR)(void *);
+typedef struct addrInfo{
+	std::vector<std::string> node_ips;	
+}addrInfo;
 
 typedef struct threadData{
 	int thread_id;
-	std::vector<std::string> node_ips;
 	std::string message;
+	addrInfo* ips;
 }threadData;
+
+
 void usage();
 /*
  * Should go through and contact each participating
  * node and assign unique IDs to each node and the
  * node with the lowest ID will be dubbed the leader.
  */
-void decideLeader();
-void *leaderProcess(void* threadData);
-void *clientProcess(void* threadData);
-threadData* commandArgs(int argc,char** argv);
+void decideLeader(addrInfo*);
+void *leaderProcess(void*);
+void *clientProcess(void*);
+addrInfo* commandArgs(int argc,char** argv);
 void printIPs(threadData*);
 
 #endif // FILESHARE_H

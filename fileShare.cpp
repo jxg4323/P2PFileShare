@@ -24,11 +24,11 @@ void* leaderProcess(void* data){
 	// -------- Server Process --------- //
 	if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0){
 		std::cerr << "socket failed" << std::endl;
-		exit(-1);
+//		exit(-1);
 	}
 	if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))){
 		std::cerr << "setsockopt" << std::endl;
-		exit(-1);
+//		exit(-1);
 	}
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
@@ -36,59 +36,65 @@ void* leaderProcess(void* data){
 
 	if(bind(server_fd, (struct sockaddr *)&address, sizeof(address))<0){
 		std::cerr << "Bind Failed" << std::endl;
-		exit(-1);
+//		exit(-1);
 	}
 
 	if(listen(server_fd,3) < 0){
 		std::cerr << "Listen" << std::endl;
-		exit(-1);
+//		exit(-1);
 	}
 
 	if((new_socket = accept(server_fd, (struct sockaddr*)&address,(socklen_t*)&addrlen))<0){
 		std::cerr << "accept" << std::endl;
-		exit(-1);
+//		exit(-1);
 	}
 	valread = read(new_socket, buffer, 1024);
 	std::cerr << buffer << std::endl;
 	send(new_socket,m,strlen(m),0);
 	std::cerr << "hello message sent" << std::endl;
 	
+	pthread_exit(NULL);
 }
 void* clientProcess(void* data){
 	threadData* info;
 	info = (threadData*)data;
 	//TODO: randomize thread id to reduce collisions
 	info->thread_id = 1;
-	info->message = "ID: " + std::to_string(info->thread_id);
+	info->message = "ID: ";
+	info->message += std::to_string(info->thread_id);
 	struct sockaddr_in address;
 	int sock = 0, valread, server_fd, new_socket, opt = 1;
 	int addrlen = sizeof(address);
 	struct sockaddr_in serv_addr;
 	const char* m = info->message.c_str();
+	const char* ip = info->ips->node_ips[0].c_str();
 	char buffer[1024] = {0};
 
 	// -------- Client Process --------- //
 	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0){
 		std::cerr << "Socket Creation Error" << std::endl;
-		exit(-1);
+//		exit(-1);
 	}
-
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_port = htons(COMM_PORT);
 	
-	if(inet_pton(AF_INET, info->node_ips[0].c_str(),&serv_addr.sin_addr)<=0){
+	
+	if(inet_pton(AF_INET, ip,&serv_addr.sin_addr)<=0){
 		std::cerr << "Invalid address/ Address not support" << std::endl;
-		exit(-1);
+//		exit(-1);
 	}
 	
+	std::cout << "REACH HERE" << std::endl;
 	if(connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0){
 		std::cerr << "Connection Failed" << std::endl;
-		exit(-1);
+//		exit(-1);
 	}
 	send(sock,m,strlen(m),0);
 	std::cout << "Message sent" << std::endl;
 	valread = read(sock,buffer,1024);
 	std::cout << buffer << std::endl;
+	
+	pthread_exit(NULL);
 }
 
 /**
@@ -96,24 +102,36 @@ void* clientProcess(void* data){
  * by receiving messages from all other nodes containg
  * the nodes id and electing a leader.
  */
-void decideLeader(){
+void decideLeader(addrInfo* ips){
 	pthread_t threads[NUM_THREADS];
-	struct threadData data[NUM_THREADS];
-	int rc;
+	pthread_attr_t attr;
+	threadData data[NUM_THREADS];
+	int rc,i;
 	void* status;
-	// create server process to listen
-	rc = pthread_create(&threads[0], NULL, leaderProcess, (void*)&data[0]);
-	// create client process to send out messages and requests
-	rc = pthread_create(&threads[1], NULL, clientProcess, (void*)&data[1]);
+	// give the server and client threads list of ip addresses
+	for( i = 0; i < NUM_THREADS; i++){
+		data[i].ips = ips;
+	}
 
-	for(int i = 0; i< NUM_THREADS;i++){
+	// Initialize and set thread joinable
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	// create server process to listen
+	i = 0;
+	rc = pthread_create(&threads[i], &attr, leaderProcess, (void*)&data[i]);
+	// create client process to send out messages and requests
+	i = 1;
+	rc = pthread_create(&threads[i], &attr, clientProcess, (void*)&data[i]);
+
+	pthread_attr_destroy(&attr);
+	for(i = 0; i< NUM_THREADS;i++){
 		rc = pthread_join(threads[i], &status);
 	}
 	pthread_exit(NULL);
 }
 
-threadData* commandArgs(int argc, char** argv){
-	threadData* node = (threadData*)malloc(sizeof(threadData));	
+addrInfo* commandArgs(int argc, char** argv){
+	addrInfo* node = (addrInfo*)malloc(sizeof(threadData));	
 	std::string line;
 	std::fstream in;
 	if( argc != 2)
@@ -129,15 +147,13 @@ threadData* commandArgs(int argc, char** argv){
 	return node;
 }
 
-void printIPs(threadData* info){
+void printIPs(addrInfo* info){
 	for(auto& i: info->node_ips){
 		std::cout << i << std::endl;
 	}
 }
 
 int main(int argc,char** argv) {
-	threadData* info = commandArgs(argc,argv);
-	//printIPs(info);
-	//decideLeader();
-	leaderProcess((void*)info);
+	addrInfo* info = commandArgs(argc,argv);
+	decideLeader(info);
 }

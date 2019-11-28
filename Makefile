@@ -45,7 +45,7 @@ CPP = $(CPP) $(CPPFLAGS)
 CXXFLAGS =	-ggdb
 CFLAGS =	-ggdb
 CLIBFLAGS =	-lm
-CCLIBFLAGS = -lpthread	
+CCLIBFLAGS = -pthread	
 ########## End of default flags
 
 
