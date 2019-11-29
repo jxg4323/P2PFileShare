@@ -42,8 +42,7 @@ void generateID(threadData* info){
 void* leaderProcess(void* data){
 	threadData* info;
 	info = (threadData*)data;
-	info->message = "ID: ";
-	info->message += std::to_string(info->thread_id);
+	info->message = "SERVER THREAD";
 	struct sockaddr_in address;
 	int sock = 0, valread, server_fd, new_socket, opt = 1;
 	int addrlen = sizeof(address);
@@ -131,19 +130,17 @@ void decideLeader(addrInfo* ips){
 	pthread_t threads[NUM_THREADS];
 	pthread_attr_t attr;
 	threadData data[NUM_THREADS];
-	int rc,i;
+	
+	int rc,i(0);
 	void* status;
+	std::cout << i << std::endl;
 	// give the server and client threads list of ip addresses
-	for( i = 0; i < NUM_THREADS; i++){
-		data[i].ips = ips;
-		data[i].thread_id = i;
-	}
+	data[i].ips = ips;
 
 	// Initialize and set thread joinable
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	// create server process to listen
-	i = 0;
 	rc = pthread_create(&threads[i], &attr, leaderProcess, (void*)&data[i]);
 	// create client process to send out messages and requests
 	i = 1;

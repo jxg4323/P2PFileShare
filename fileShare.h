@@ -26,11 +26,15 @@ typedef struct addrInfo{
 	std::vector<std::string> node_ips;	
 }addrInfo;
 
+typedef struct serverData{
+	std::string serv_msg;
+	std::map<int,std::string> nodeInfo;
+}serverData;
+
 typedef struct threadData{
 	int thread_id;
 	std::string message;
 	addrInfo* ips;
-	std::map<int,std::string> nodeInfo;
 }threadData;
 
 void generateID(threadData*);
