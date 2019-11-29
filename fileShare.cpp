@@ -4,6 +4,37 @@ void usage(){
 	std::cerr << "usage: ./fileShare <inputFileName>" << std::endl;
 	exit(-1);
 }
+/*
+ * Tokenize the information sent between nodes.
+ * Return a list of the tokens.
+ */
+std::vector<std::string> readBuffer(char* buffer){
+	std::string str=buffer;
+	str.erase(std::remove_if(str.begin(), str.end(), ::isspace), str.end());
+	std::stringstream ss(str);
+	std::string item;
+	std::vector<std::string> tokens;
+	while(std::getline(ss,item,':')){
+		tokens.push_back(item);
+	}
+	return tokens;
+	
+}
+
+/*
+ * Given a thread_id generate pseudorandom number
+ * that is different than the given thread_id.
+ * Change the given threadData id to the newly
+ * generated id.
+ */
+void generateID(threadData* info){
+	int result,check;
+	check = info->thread_id;
+	srand(time(NULL));
+	while((result = ((rand()%MAX_NUM_NODES)+1)) == check){}	
+	info->thread_id = result;
+}
+
 /**
  * Set up server socket on the containg node and
  * wait for a response from a client node.
@@ -11,8 +42,6 @@ void usage(){
 void* leaderProcess(void* data){
 	threadData* info;
 	info = (threadData*)data;
-	//TODO: randomize thread id to reduce collisions
-	info->thread_id = 1;
 	info->message = "ID: ";
 	info->message += std::to_string(info->thread_id);
 	struct sockaddr_in address;
@@ -24,11 +53,9 @@ void* leaderProcess(void* data){
 	// -------- Server Process --------- //
 	if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0){
 		std::cerr << "socket failed" << std::endl;
-//		exit(-1);
 	}
 	if(setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))){
 		std::cerr << "setsockopt" << std::endl;
-//		exit(-1);
 	}
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = INADDR_ANY;
@@ -36,20 +63,19 @@ void* leaderProcess(void* data){
 
 	if(bind(server_fd, (struct sockaddr *)&address, sizeof(address))<0){
 		std::cerr << "Bind Failed" << std::endl;
-//		exit(-1);
 	}
 
 	if(listen(server_fd,3) < 0){
 		std::cerr << "Listen" << std::endl;
-//		exit(-1);
 	}
 
 	if((new_socket = accept(server_fd, (struct sockaddr*)&address,(socklen_t*)&addrlen))<0){
 		std::cerr << "accept" << std::endl;
-//		exit(-1);
 	}
+	//TODO: function here that will do the leaders duties
 	valread = read(new_socket, buffer, 1024);
-	std::cerr << buffer << std::endl;
+	std::vector<std::string> tokens = readBuffer(buffer);	
+	
 	send(new_socket,m,strlen(m),0);
 	std::cerr << "hello message sent" << std::endl;
 	
@@ -58,8 +84,7 @@ void* leaderProcess(void* data){
 void* clientProcess(void* data){
 	threadData* info;
 	info = (threadData*)data;
-	//TODO: randomize thread id to reduce collisions
-	info->thread_id = 1;
+	generateID(info);
 	info->message = "ID: ";
 	info->message += std::to_string(info->thread_id);
 	struct sockaddr_in address;
@@ -67,13 +92,13 @@ void* clientProcess(void* data){
 	int addrlen = sizeof(address);
 	struct sockaddr_in serv_addr;
 	const char* m = info->message.c_str();
+	//TODO: loop through each ip address and form connection
 	const char* ip = info->ips->node_ips[0].c_str();
 	char buffer[1024] = {0};
 
 	// -------- Client Process --------- //
 	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0){
 		std::cerr << "Socket Creation Error" << std::endl;
-//		exit(-1);
 	}
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_port = htons(COMM_PORT);
@@ -81,17 +106,17 @@ void* clientProcess(void* data){
 	
 	if(inet_pton(AF_INET, ip,&serv_addr.sin_addr)<=0){
 		std::cerr << "Invalid address/ Address not support" << std::endl;
-//		exit(-1);
 	}
-	
-	std::cout << "REACH HERE" << std::endl;
-	if(connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0){
-		std::cerr << "Connection Failed" << std::endl;
-//		exit(-1);
+	// wait and try to connect with node	
+	while(connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0){
+//		std::cerr << "Connection Failed" << std::endl;	
 	}
+
+	//TODO: Create function that will perform client actions
 	send(sock,m,strlen(m),0);
 	std::cout << "Message sent" << std::endl;
 	valread = read(sock,buffer,1024);
+	std::vector<std::string> tokens = readBuffer(buffer);
 	std::cout << buffer << std::endl;
 	
 	pthread_exit(NULL);
@@ -111,6 +136,7 @@ void decideLeader(addrInfo* ips){
 	// give the server and client threads list of ip addresses
 	for( i = 0; i < NUM_THREADS; i++){
 		data[i].ips = ips;
+		data[i].thread_id = i;
 	}
 
 	// Initialize and set thread joinable
