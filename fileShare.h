@@ -21,11 +21,12 @@
 #define COMM_PORT 12000
 #define MAX_CLIENTS 1024
 #define NUM_THREADS 2
-#define LEADER_MSG "YOUR LEADER"
 #define CHANGE_ID "CHANGE ID"
 #define GOOD_ID "GOOD_ID"
 #define DEFAULT_MSG "SERVER MSG"
 #define MAX_NUM_NODES 4096
+#define FILE_NAME_ST "witch"
+#define MAX_FILES 5
 #define BUFFER_SIZE 1024
 typedef struct addrInfo{
 	std::vector<std::string> node_ips;	
@@ -39,7 +40,7 @@ typedef struct serverData{
 }serverData;
 
 typedef struct threadData{
-	int thread_id;
+	std::string fileNames[MAX_FILES];
 	std::string message;
 	char buffer[BUFFER_SIZE];
 	addrInfo* ips;
@@ -49,20 +50,20 @@ typedef struct commData{
 	std::string msg;
 	int totalClients;
 	int conn_fd;
+	bool terminate;
 	char con_client_addr[INET_ADDRSTRLEN];
 	char buffer[BUFFER_SIZE];
 	serverData* sData;
 }commData;
+int node_id;
 
-
-void informLeader(serverData*);
 bool checkID(serverData*,int);
 /*
  * Function to handle communication with server and client.
  */
 void *serverHandler(void*);
 void clientHandler(threadData*);
-void generateID(threadData*);
+void generateID();
 std::vector<std::string> readBuffer(char*);
 void usage();
 /*

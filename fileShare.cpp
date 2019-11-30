@@ -26,12 +26,12 @@ std::vector<std::string> readBuffer(char* buffer){
  * Change the given threadData id to the newly
  * generated id.
  */
-void generateID(threadData* info){
+void generateID(){
 	int result,check;
-	check = info->thread_id;
+	check = node_id;
 	srand(time(NULL));
 	while((result = ((rand()%MAX_NUM_NODES)+1)) == check){}	
-	info->thread_id = result;
+	node_id = result;
 }
 
 /*
@@ -56,8 +56,9 @@ void *serverHandler(void* data){
 			comms->sData->nodeInfo.insert(std::pair<int,char*>(cid,comms->con_client_addr));	
 			std::pair<int,char*> leader = *(comms->sData->nodeInfo.begin());
 			if(comms->sData->nodeInfo.size() == comms->totalClients){
-				informLeader(comms->sData);
-				std::cout << "Client IP: " << comms->con_client_addr << " Leader IP: " << leader.second << std::endl;
+				if( node_id != leader.first){ // This isn't the leader node
+					// only accept commands from clients about giving file info
+				}
 			}
 		}
 		
@@ -72,31 +73,6 @@ void *serverHandler(void* data){
 	m = comms->msg.c_str();
 	comms->conn_fd;
 	send(comms->conn_fd,m,strlen(m),0);
-}
-
-/*
- * Reach out to the proper server and tell them that they
- * are the leader node.
- */
-void informLeader(serverData* sData){
-	std::pair<int,char*> node = *(sData->nodeInfo.begin());	
-	struct sockaddr_in address;
-	int sock = 0, valread;
-	struct sockaddr_in serv_addr;
-	std::string msg = LEADER_MSG;
-	const char* m = msg.c_str();
-	char buffer[BUFFER_SIZE];
-	if((sock = socket(AF_INET, SOCK_STREAM, 0) < 0))
-		std::cout << "Socket Creation Error" << std::endl;
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(COMM_PORT);
-	if(inet_pton(AF_INET, node.second, &serv_addr.sin_addr)<=0)
-		std::cout << "Invalid Address" << std::endl;
-	while(connect(sock,(struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0){}
-
-	send(sock, m, strlen(m), 0);
-	valread = read( sock,buffer, BUFFER_SIZE);
-
 }
 
 /*
@@ -124,6 +100,7 @@ void* leaderProcess(void* data){
 	struct sockaddr_in address;
 	int sock = 0, clientNum = 0, valread, server_fd, new_socket, opt = 1;
 	int addrlen = sizeof(address);
+	bool cont = true;
 	struct sockaddr_in serv_addr;
 	// -------- Server Process --------- //
 	if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0){
@@ -141,7 +118,7 @@ void* leaderProcess(void* data){
 	if(listen(server_fd,3) < 0){
 		std::cerr << "Listen" << std::endl;
 	}
-	while(1){
+	while( cont == true ){
 		if((new_socket = accept(server_fd, (struct sockaddr*)&address,(socklen_t*)&addrlen))<0){
 			std::cerr << "accept" << std::endl;
 		}
@@ -158,7 +135,13 @@ void* leaderProcess(void* data){
 		pthread_detach(info->commThreads[clientNum]);	
 		pthread_mutex_unlock( &mutex );
 		clientNum++;
+		if( comms->terminate == true ){
+			cont = false;
+			close(new_socket);
+			std::cout << "terminate server" << std::endl;
+		}
 	}
+	std::cout << "DO I get here on termination" << std::endl;
 	close(server_fd);
 	pthread_exit(NULL);
 }
@@ -166,12 +149,30 @@ void* leaderProcess(void* data){
 void clientHandler(threadData* cData){
 	
 }
+/*
+ * Setup, create, and write data to each file.
+ */
+void setupFiles(threadData* data){
+	std::string file_name = FILE_NAME_ST;
+	std::string text;
+	for( int i = 0; i < MAX_FILES; i++){
+		std::fstream file;
+		file_name += std::to_string(i);
+		text = "text written to " + file_name;
+		data->fileNames[i] = file_name;
+		file.open(file_name, std::ios::out);
+		file << text << std::endl;
+		file.close();
+		file_name = FILE_NAME_ST;
+	}	
+}
 
 void* clientProcess(void* data){
 	threadData* info = (threadData*)data;
-	generateID(info);
+	generateID();
 	info->message = "ID: ";
-	info->message += std::to_string(info->thread_id);
+	info->message += std::to_string(node_id);
+	std::cout << "CLIENT ID: " << node_id << std::endl;
 	struct sockaddr_in address;
 	int sock = 0, valread, server_fd, new_socket, opt = 1;
 	int addrlen = sizeof(address);
@@ -211,6 +212,7 @@ void* clientProcess(void* data){
  */
 void decideLeader(addrInfo* ips){
 	pthread_t threads[NUM_THREADS];
+	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 	pthread_attr_t attr;
 	threadData data;
 	serverData sData;
@@ -220,14 +222,20 @@ void decideLeader(addrInfo* ips){
 	// give the server and client threads list of ip addresses
 	data.ips = ips;	
 	sData.totalClients = ips->node_ips.size();
+	// create client's files
+	setupFiles(&data);
 	// Initialize and set thread joinable
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	pthread_mutex_lock( &mutex );
 	// create server process to listen
 	rc = pthread_create(&threads[i], &attr, leaderProcess, (void*)&sData);
+	pthread_mutex_unlock( &mutex );
+	pthread_mutex_lock( &mutex );
 	// create client process to send out messages and requests
 	i = 1;
 	rc = pthread_create(&threads[i], &attr, clientProcess, (void*)&data);
+	pthread_mutex_unlock( &mutex );
 
 	pthread_attr_destroy(&attr);
 	for(i = 0; i< NUM_THREADS;i++){
