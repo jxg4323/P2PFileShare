@@ -38,6 +38,11 @@ typedef struct serverData{
 	pthread_t commThreads[MAX_CLIENTS];
 	std::map<int,char*> nodeInfo;
 }serverData;
+//TODO: implemnt this in the mapping of ID,and IP
+typedef struct clientFileData{
+	char* ip;
+	std::string files[MAX_FILES];
+}clientFileData;
 
 typedef struct threadData{
 	std::string fileNames[MAX_FILES];
