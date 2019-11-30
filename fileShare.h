@@ -16,27 +16,39 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <utility>
 #include <sys/socket.h>
 #define COMM_PORT 12000
 #define NUM_THREADS 2
-#define LEADER_MSSG "YOUR LEADER"
-#define ID_CHG_MSG "CHANGE ID"
+#define LEADER_MSG "YOUR LEADER"
+#define CHANGE_ID "CHANGE ID"
+#define GOOD_ID "GOOD_ID"
 #define MAX_NUM_NODES 4096
+#define BUFFER_SIZE 1024
 typedef struct addrInfo{
 	std::vector<std::string> node_ips;	
 }addrInfo;
 
 typedef struct serverData{
 	std::string serv_msg;
-	std::map<int,std::string> nodeInfo;
+	int totalClients;
+	int conn_fd;
+	char con_client_addr[INET_ADDRSTRLEN];
+	char buffer[BUFFER_SIZE];
+	std::map<int,char*> nodeInfo;
 }serverData;
 
 typedef struct threadData{
 	int thread_id;
 	std::string message;
+	char buffer[BUFFER_SIZE];
 	addrInfo* ips;
 }threadData;
 
+void informLeader(serverData*);
+bool checkID(serverData*,int);
+void serverHandler(serverData*);
+void clientHandler(threadData*);
 void generateID(threadData*);
 std::vector<std::string> readBuffer(char*);
 void usage();
