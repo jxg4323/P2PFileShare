@@ -19,10 +19,12 @@
 #include <utility>
 #include <sys/socket.h>
 #define COMM_PORT 12000
+#define MAX_CLIENTS 1024
 #define NUM_THREADS 2
 #define LEADER_MSG "YOUR LEADER"
 #define CHANGE_ID "CHANGE ID"
 #define GOOD_ID "GOOD_ID"
+#define DEFAULT_MSG "SERVER MSG"
 #define MAX_NUM_NODES 4096
 #define BUFFER_SIZE 1024
 typedef struct addrInfo{
@@ -32,9 +34,7 @@ typedef struct addrInfo{
 typedef struct serverData{
 	std::string serv_msg;
 	int totalClients;
-	int conn_fd;
-	char con_client_addr[INET_ADDRSTRLEN];
-	char buffer[BUFFER_SIZE];
+	pthread_t commThreads[MAX_CLIENTS];
 	std::map<int,char*> nodeInfo;
 }serverData;
 
@@ -45,9 +45,22 @@ typedef struct threadData{
 	addrInfo* ips;
 }threadData;
 
+typedef struct commData{
+	std::string msg;
+	int totalClients;
+	int conn_fd;
+	char con_client_addr[INET_ADDRSTRLEN];
+	char buffer[BUFFER_SIZE];
+	serverData* sData;
+}commData;
+
+
 void informLeader(serverData*);
 bool checkID(serverData*,int);
-void serverHandler(serverData*);
+/*
+ * Function to handle communication with server and client.
+ */
+void *serverHandler(void*);
 void clientHandler(threadData*);
 void generateID(threadData*);
 std::vector<std::string> readBuffer(char*);

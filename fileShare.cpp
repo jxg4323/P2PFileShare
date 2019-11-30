@@ -38,44 +38,53 @@ void generateID(threadData* info){
  * This function will deal with message received
  * by the server.
  */
-void serverHandler(serverData* sData){
-	std::string serv_msg;
-		
-	read(sData->conn_fd,sData->buffer, BUFFER_SIZE);	
-	std::vector<std::string> tokens = readBuffer(sData->buffer);	
+void *serverHandler(void* data){
+	commData* comms = (commData*)data;
+	comms->msg = DEFAULT_MSG;
+	read(comms->conn_fd,comms->buffer, BUFFER_SIZE);	
+	std::vector<std::string> tokens = readBuffer(comms->buffer);	
 	const char* m;
+	std::cout << "SERVER RECVEIVED" << std::endl;
 	// ID Check
 	if( tokens.size() > 1 ){
 		int cid = std::stoi(tokens.at(1));
 		// Check to confirm the client id is unique if not exit
-		if( checkID(sData,cid) == false ){
-			sData->serv_msg = CHANGE_ID;
-			return;
+		if( checkID(comms->sData,cid) == false ){
+			comms->msg = CHANGE_ID;
 		}else{
 			// only add once it is clear no other cids have the id
-			sData->nodeInfo.insert(std::pair<int,char*>(cid,sData->con_client_addr));	
-			if(sData->nodeInfo.size() == sData->totalClients)
-				informLeader(sData);	
+			comms->sData->nodeInfo.insert(std::pair<int,char*>(cid,comms->con_client_addr));	
+			std::pair<int,char*> leader = *(comms->sData->nodeInfo.begin());
+			if(comms->sData->nodeInfo.size() == comms->totalClients){
+				informLeader(comms->sData);
+				std::cout << "Client IP: " << comms->con_client_addr << " Leader IP: " << leader.second << std::endl;
+			}
 		}
 		
 	}
 	/*else
-		switch(sData->buffer){
+		switch(comms->buffer){
 			case YOUR_LEADER:
 				break;
 		}*/
 	
 	// send Return message to client
-	m = sData->serv_msg.c_str();
-	send(sData->conn_fd,m,strlen(m),0);
+	m = comms->msg.c_str();
+	comms->conn_fd;
+	send(comms->conn_fd,m,strlen(m),0);
 }
 
+/*
+ * Reach out to the proper server and tell them that they
+ * are the leader node.
+ */
 void informLeader(serverData* sData){
 	std::pair<int,char*> node = *(sData->nodeInfo.begin());	
 	struct sockaddr_in address;
 	int sock = 0, valread;
 	struct sockaddr_in serv_addr;
-	char* msg = LEADER_MSG;
+	std::string msg = LEADER_MSG;
+	const char* m = msg.c_str();
 	char buffer[BUFFER_SIZE];
 	if((sock = socket(AF_INET, SOCK_STREAM, 0) < 0))
 		std::cout << "Socket Creation Error" << std::endl;
@@ -83,10 +92,9 @@ void informLeader(serverData* sData){
 	serv_addr.sin_port = htons(COMM_PORT);
 	if(inet_pton(AF_INET, node.second, &serv_addr.sin_addr)<=0)
 		std::cout << "Invalid Address" << std::endl;
-	if(connect(sock,(struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
-		std::cout << "Inform Leader: Connection Failed" << std::endl;
+	while(connect(sock,(struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0){}
 
-	send(sock, msg, strlen(msg), 0);
+	send(sock, m, strlen(m), 0);
 	valread = read( sock,buffer, BUFFER_SIZE);
 
 }
@@ -111,13 +119,12 @@ bool checkID(serverData* sData, int cid){
  */
 void* leaderProcess(void* data){
 	serverData* info = (serverData*)data;
-	info->serv_msg = "SERVER THREAD MSG";
+	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+	
 	struct sockaddr_in address;
-	int sock = 0, valread, server_fd, opt = 1;
+	int sock = 0, clientNum = 0, valread, server_fd, new_socket, opt = 1;
 	int addrlen = sizeof(address);
 	struct sockaddr_in serv_addr;
-	char cAddr[INET_ADDRSTRLEN];
-	const char* m;
 	// -------- Server Process --------- //
 	if((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0){
 		std::cerr << "socket failed" << std::endl;
@@ -134,19 +141,24 @@ void* leaderProcess(void* data){
 	if(listen(server_fd,3) < 0){
 		std::cerr << "Listen" << std::endl;
 	}
-	if((info->conn_fd = accept(server_fd, (struct sockaddr*)&address,(socklen_t*)&addrlen))<0){
-		std::cerr << "accept" << std::endl;
+	while(1){
+		if((new_socket = accept(server_fd, (struct sockaddr*)&address,(socklen_t*)&addrlen))<0){
+			std::cerr << "accept" << std::endl;
+		}
+		// Communication information	
+		commData* comms = (commData*)malloc(sizeof(commData));
+		// Client IP address
+		inet_ntop(AF_INET, &(address.sin_addr), comms->con_client_addr, INET_ADDRSTRLEN);
+		comms->totalClients = info->totalClients;
+		comms->conn_fd = new_socket;
+		comms->sData = info;
+		// initialize and have server communicate to individual clients
+		pthread_mutex_lock( &mutex );
+		pthread_create(&(info->commThreads[clientNum]),NULL, serverHandler,(void*)comms);
+		pthread_detach(info->commThreads[clientNum]);	
+		pthread_mutex_unlock( &mutex );
+		clientNum++;
 	}
-	// Client IP address
-	inet_ntop(AF_INET, &(address.sin_addr), info->con_client_addr, INET_ADDRSTRLEN);
-	//TODO: Create infinite loop to house below
-	//TODO: Spawn threads to handle each connection
-	
-
-	std::cout << "REACH HERE" << std::endl;
-	// handle messages received from clients
-	serverHandler(info);		
-
 	close(server_fd);
 	pthread_exit(NULL);
 }
@@ -180,16 +192,13 @@ void* clientProcess(void* data){
 			std::cerr << "Invalid address/ Address not support" << std::endl;
 		}
 		// wait and try to connect with node	
-		while(connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0){
-		//	sleep(2);
-		//	std::cerr << "Connection Failed" << std::endl;	
-		}
+		while(connect(sock, (struct sockaddr *)&serv_addr, sizeof(serv_addr))<0){}
 		//TODO: Create function that will perform client actions
 		send(sock,m,strlen(m),0);
 		std::cout << "Message sent" << std::endl;
 		valread = read(sock,info->buffer,BUFFER_SIZE);
 		std::vector<std::string> tokens = readBuffer(info->buffer);
-		//std::cout << info->buffer << std::endl;
+		std::cout << info->buffer << std::endl;
 	}
 	std::cout << "Notified Everyone" << std::endl;
 	pthread_exit(NULL);
