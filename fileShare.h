@@ -22,6 +22,7 @@
 #define MAX_CLIENTS 1024
 #define NUM_THREADS 2
 #define ID "ID"
+#define ASK_LEADER "ASK_LEADER"
 #define CHANGE_ID "CHANGE ID"
 #define GOOD_ID "GOOD_ID"
 #define WANT_FILE "WANT"
@@ -71,6 +72,7 @@ typedef struct commData{
 int node_id,am_leader(UNDECIDED);
 std::string leaderIP;
 
+void printClientInfo(serverData*);
 int findFile(serverData*,std::string);
 void setupFiles(threadData*,std::string[]);
 bool checkID(serverData*,int);
