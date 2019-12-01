@@ -72,6 +72,7 @@ typedef struct commData{
 int node_id,am_leader(UNDECIDED);
 std::string leaderIP;
 
+void peerToPeer(threadData*,std::string);
 void printClientInfo(serverData*);
 int findFile(serverData*,std::string);
 void setupFiles(threadData*,std::string[]);

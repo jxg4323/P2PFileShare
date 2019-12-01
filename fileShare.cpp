@@ -246,6 +246,31 @@ void clientHandler(threadData* cData, std::string LIP){
 //	}
 	
 }
+
+/*
+ * Opens a socket to the node which has the desired file
+ * and recieves the file.
+ */
+void peerToPeer(threadData* cData, std::string peerIP){
+	struct sockaddr_in address;
+	int sock = 0, valread, server_fd, new_socket, opt = 1;
+	int addrlen = sizeof(address);
+	struct sockaddr_in serv_addr;
+	const char* msg = DEFAULT_MSG;
+	const char* ip = LIP.c_str();
+	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+		std::cerr << "Socket Creation Error" << std::endl;
+	}
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_port = htons(COMM_PORT);
+	if(inet_pton(AF_INET, ip, &serv_addr.sin_addr)<0){
+		std::cerr << "Invalid address/ Address not supported" << std::endl;
+	}
+	// continue trying to connect to ip
+	if(connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr))<=0){}
+	
+}
+
 /*
  * Setup, create, and write data to each file.
  */
