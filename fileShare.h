@@ -23,30 +23,38 @@
 #define NUM_THREADS 2
 #define CHANGE_ID "CHANGE ID"
 #define GOOD_ID "GOOD_ID"
+#define WANT_FILE "WANT"
+#define FILE_NOT_FOUND "FILE NOT FOUND"
 #define DEFAULT_MSG "SERVER MSG"
 #define MAX_NUM_NODES 4096
-#define FILE_NAME_ST "witch"
+#define FILE_NAME_OPTIONS "[witch,wizard,elf,dwarf,human,ring,power,magic,evil,good]"
+#define INPUT_STRING "What file would you like?(type a name from above)"
 #define MAX_FILES 5
+#define MAX_NAMES 10
 #define BUFFER_SIZE 1024
+#define NOT_LEADER 0
+#define YES_LEADER 1
+#define UNDECIDED 2
 typedef struct addrInfo{
 	std::vector<std::string> node_ips;	
 }addrInfo;
 
-typedef struct serverData{
-	std::string serv_msg;
-	int totalClients;
-	pthread_t commThreads[MAX_CLIENTS];
-	std::map<int,char*> nodeInfo;
-}serverData;
-//TODO: implemnt this in the mapping of ID,and IP
 typedef struct clientFileData{
 	char* ip;
 	std::string files[MAX_FILES];
 }clientFileData;
 
+typedef struct serverData{
+	std::string serv_msg;
+	int totalClients;
+	pthread_t commThreads[MAX_CLIENTS];
+	std::map<int,clientFileData*> nodeInfo;
+}serverData;
+
 typedef struct threadData{
 	std::string fileNames[MAX_FILES];
 	std::string message;
+	bool good_id;
 	char buffer[BUFFER_SIZE];
 	addrInfo* ips;
 }threadData;
@@ -55,13 +63,14 @@ typedef struct commData{
 	std::string msg;
 	int totalClients;
 	int conn_fd;
-	bool terminate;
 	char con_client_addr[INET_ADDRSTRLEN];
 	char buffer[BUFFER_SIZE];
 	serverData* sData;
 }commData;
-int node_id;
+int node_id,am_leader(UNDECIDED);
+std::string leaderIP;
 
+int findFile(serverData*,std::string);
 bool checkID(serverData*,int);
 /*
  * Function to handle communication with server and client.
