@@ -56,7 +56,7 @@ int findFile(serverData* sData, std::string file){
 	for( it = sData->nodeInfo.begin(); it != sData->nodeInfo.end(); it++){
 		for( int i = 0; i < MAX_FILES; i++){
 			std::string cmp = it->second->files[i];
-			if( cmp.find(file) != std::string::npos )
+			if( cmp == file )
 				result = it->first;	
 		}	
 	}
@@ -92,16 +92,19 @@ void *serverHandler(void* data){
 		std::vector<std::string> tokens = readBuffer(comms->buffer);
 		clientFileData* cData;
 		const char* m;
+		pthread_mutex_lock( &mutex );
 		// Check to see If I'm the leader node
 		std::pair<int,clientFileData*> leader = *(comms->sData->nodeInfo.begin());
 		if(comms->sData->nodeInfo.size() == comms->totalClients){
 			leaderIP = leader.second->ip;
 			if( node_id == leader.first ){ // This is the leader node
 				am_leader = YES_LEADER;
+				printClientInfo(comms->sData);
 			}else{
 				am_leader = NOT_LEADER;
 			}
 		}		
+		pthread_mutex_unlock( &mutex );
 		if( tokens.size() > 0 ){	
 			// ID Check
 			if( tokens.at(0) == ID && am_leader == UNDECIDED ){
@@ -113,28 +116,52 @@ void *serverHandler(void* data){
 					comms->msg = GOOD_ID;
 					cData = clientInfo(tokens);
 					cData->ip = comms->con_client_addr;
+					pthread_mutex_lock( &mutex );
 					// only add once it is clear no other cids have the id
 					comms->sData->nodeInfo.insert(std::pair<int,clientFileData*>(cid,cData));	
+					pthread_mutex_unlock( &mutex );
 				}
 			}else if( tokens.at(0) == WANT_FILE ){ // Leader Duties
 				std::map<int,clientFileData*>::iterator it;
 				std::string file = tokens.at(1);
+				std::string m;
+				pthread_mutex_lock( &mutex );
 				int key = findFile(comms->sData,file);
 				it = comms->sData->nodeInfo.find(key);
-				pthread_mutex_lock( &mutex );
-				comms->msg = it->second->ip;
+				m = it->second->ip;
 				pthread_mutex_unlock( &mutex );
-				comms->msg += ":" + COMM_PORT;	
+				comms->msg = m.c_str();	
 		
 			}else if( tokens.at(0) == ASK_LEADER ){
+				pthread_mutex_lock( &mutex );
 				if( node_id == leader.first ){
 					am_leader == YES_LEADER;
-					printClientInfo(comms->sData);
 				}else
 					am_leader == NOT_LEADER;
-				comms->msg = leader.second->ip;	
-			}else if( am_leader == NOT_LEADER ){ // non leader duties
-
+				comms->msg = leader.second->ip;
+				pthread_mutex_unlock( &mutex );	
+			}else if( tokens.at(0) == GIVE_FILE ){ // non leader duties
+				std::map<int,clientFileData*>::iterator it;
+				clientFileData* c;
+				std::string fileName = tokens.at(1);
+				pthread_mutex_lock( &mutex );
+				int key = node_id;
+				it = comms->sData->nodeInfo.find(key);
+				c = it->second;
+				pthread_mutex_unlock( &mutex );
+				std::string total;
+				for( int i = 0; i < MAX_FILES;i++ ){
+					if( c->files[i] == fileName ){
+						std::fstream file;
+						std::string line;
+						file.open(fileName, std::ios::in);
+						while( getline(file,line) ){
+							total += line;
+						}
+						comms->msg = fileName + ":" + total;
+					}
+				}
+				
 			}
 		// send Return message to client
 		m = comms->msg.c_str();
@@ -207,7 +234,6 @@ void* leaderProcess(void* data){
 		for( int i = 0; i < clientNum; i++){
 			pthread_join(info->commThreads[i],NULL);
 		}
-
 	}
 	close(server_fd);
 	pthread_exit(NULL);
@@ -218,12 +244,11 @@ void* leaderProcess(void* data){
  */
 void clientHandler(threadData* cData, std::string LIP){
 	struct sockaddr_in address;
-	int sock = 0, valread, server_fd, new_socket, opt = 1;
+	int sock = 0, valread, server_fd, new_socket, opt = 1, f_threads = 0;
 	int addrlen = sizeof(address);
 	struct sockaddr_in serv_addr;
 	const char* msg = DEFAULT_MSG;
 	const char* ip = LIP.c_str();
-//	while(1){
 	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0){
 		std::cerr << "Socket Creation Error" << std::endl;
 	}
@@ -235,14 +260,22 @@ void clientHandler(threadData* cData, std::string LIP){
 	// continue trying to connect to ip
 	if(connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr))<=0){}
 	//TODO: insert function to talk with user
-	cData->message = "WANT:power";
-	msg = cData->message.c_str();
-	std::cout << "Client tells leader " << cData->message <<std::endl;
-	send(sock,msg,strlen(msg),0);
-	valread = read(sock,cData->buffer,BUFFER_SIZE);
-	std::vector<std::string> tokens = readBuffer(cData->buffer);
-	std::cout << cData->buffer << std::endl;
-
+//	while(1){
+		cData->message = "WANT:power1";
+		fileTransData* trans = (fileTransData*)malloc(sizeof(fileTransData));
+		trans->fileName = "power1";
+		msg = cData->message.c_str();
+		std::cout << "Client tells leader " << cData->message <<std::endl;
+		send(sock,msg,strlen(msg),0);
+		valread = read(sock,cData->buffer,BUFFER_SIZE);
+		std::vector<std::string> tokens = readBuffer(cData->buffer);
+		trans->ip = tokens.at(0);
+		
+		std::cout << "Buffer: " << cData->buffer << std::endl;
+		pthread_create(&(cData->fileThreads[f_threads]),NULL, peerToPeer, (void*)trans);
+		f_threads++;
+		for( int i = 0; i < f_threads; i++)
+			pthread_join(cData->fileThreads[i],NULL);
 //	}
 	
 }
@@ -251,13 +284,17 @@ void clientHandler(threadData* cData, std::string LIP){
  * Opens a socket to the node which has the desired file
  * and recieves the file.
  */
-void peerToPeer(threadData* cData, std::string peerIP){
+void *peerToPeer(void* data){
+	fileTransData* trans = (fileTransData*)data;
 	struct sockaddr_in address;
 	int sock = 0, valread, server_fd, new_socket, opt = 1;
 	int addrlen = sizeof(address);
 	struct sockaddr_in serv_addr;
-	const char* msg = DEFAULT_MSG;
-	const char* ip = LIP.c_str();
+	char buffer[BUFFER_SIZE];
+	const char* m = DEFAULT_MSG;
+	const char* ip = trans->ip.c_str();
+	std::string msg = GIVE_FILE;
+	msg += trans->fileName;
 	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0){
 		std::cerr << "Socket Creation Error" << std::endl;
 	}
@@ -268,7 +305,16 @@ void peerToPeer(threadData* cData, std::string peerIP){
 	}
 	// continue trying to connect to ip
 	if(connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr))<=0){}
-	
+	m = msg.c_str();
+	std::cout << "PEER TO PEER GETS CALLED: " << msg << std::endl;
+	send(sock,m,strlen(m),0);
+	valread = read(sock,buffer,BUFFER_SIZE);
+	std::vector<std::string> tokens = readBuffer(buffer);
+	std::fstream file;
+	file.open(trans->fileName, std::ios::out);
+	file << tokens.at(1) << "\n";
+	file.close();
+	pthread_exit(NULL);
 }
 
 /*
@@ -293,9 +339,12 @@ void setupFiles(threadData* data,std::string names[]){
 
 void* clientProcess(void* data){
 	threadData* info = (threadData*)data;
+	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_mutex_lock( &mutex );
 	generateID();
 	info->message = "ID: ";
 	info->message += std::to_string(node_id);
+	pthread_mutex_unlock( &mutex );
 	for( int i = 0; i < MAX_FILES; i++){
 		info->message += ":" + info->fileNames[i];
 	}
@@ -325,8 +374,11 @@ void* clientProcess(void* data){
 			std::vector<std::string> tokens = readBuffer(info->buffer);
 			if( tokens.at(0) == GOOD_ID )
 				info->good_id = true;
-			else
+			else{
+				pthread_mutex_lock( &mutex );
 				generateID();
+				pthread_mutex_unlock( &mutex );
+			}
 		}
 //		close(server_fd);
 	}

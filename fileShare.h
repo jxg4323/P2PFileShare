@@ -26,6 +26,7 @@
 #define CHANGE_ID "CHANGE ID"
 #define GOOD_ID "GOOD_ID"
 #define WANT_FILE "WANT"
+#define GIVE_FILE "GIVE"
 #define FILE_NOT_FOUND "FILE NOT FOUND"
 #define DEFAULT_MSG "SERVER MSG"
 #define MAX_NUM_NODES 4096
@@ -58,6 +59,7 @@ typedef struct threadData{
 	std::string message;
 	bool good_id;
 	char buffer[BUFFER_SIZE];
+	pthread_t fileThreads[MAX_CLIENTS];
 	addrInfo* ips;
 }threadData;
 
@@ -69,10 +71,14 @@ typedef struct commData{
 	char buffer[BUFFER_SIZE];
 	serverData* sData;
 }commData;
+typedef struct fileTransData{
+	std::string ip;
+	std::string fileName;
+}fileTransData;
 int node_id,am_leader(UNDECIDED);
 std::string leaderIP;
 
-void peerToPeer(threadData*,std::string);
+void *peerToPeer(void*);
 void printClientInfo(serverData*);
 int findFile(serverData*,std::string);
 void setupFiles(threadData*,std::string[]);
