@@ -28,6 +28,7 @@
 #define WANT_FILE "WANT"
 #define GIVE_FILE "GIVE"
 #define FILE_NOT_FOUND "FILE NOT FOUND"
+#define FILE_DOWNLOADED "File has been downloaded"
 #define DEFAULT_MSG "SERVER MSG"
 #define MAX_NUM_NODES 4096
 #define FILE_NAME_OPTIONS "[witch,wizard,elf,dwarf,human,ring,power,magic,evil,good]"
@@ -93,10 +94,9 @@ std::vector<std::string> readBuffer(char*);
 void usage();
 /*
  * Should go through and contact each participating
- * node and assign unique IDs to each node and the
- * node with the lowest ID will be dubbed the leader.
+ * node and begin the fileShare program.
  */
-void decideLeader(addrInfo*);
+void run(addrInfo*);
 void *leaderProcess(void*);
 void *clientProcess(void*);
 addrInfo* commandArgs(int argc,char** argv);

@@ -109,6 +109,7 @@ void *serverHandler(void* data){
 			// ID Check
 			if( tokens.at(0) == ID && am_leader == UNDECIDED ){
 				int cid = std::stoi(tokens.at(1));
+				pthread_mutex_lock( &mutex );
 				// Check to confirm the client id is unique if not exit
 				if( checkID(comms->sData,cid) == false ){
 					comms->msg = CHANGE_ID;
@@ -116,11 +117,10 @@ void *serverHandler(void* data){
 					comms->msg = GOOD_ID;
 					cData = clientInfo(tokens);
 					cData->ip = comms->con_client_addr;
-					pthread_mutex_lock( &mutex );
 					// only add once it is clear no other cids have the id
 					comms->sData->nodeInfo.insert(std::pair<int,clientFileData*>(cid,cData));	
-					pthread_mutex_unlock( &mutex );
 				}
+				pthread_mutex_unlock( &mutex );
 			}else if( tokens.at(0) == WANT_FILE ){ // Leader Duties
 				std::map<int,clientFileData*>::iterator it;
 				std::string file = tokens.at(1);
@@ -148,7 +148,6 @@ void *serverHandler(void* data){
 				int key = node_id;
 				it = comms->sData->nodeInfo.find(key);
 				c = it->second;
-				pthread_mutex_unlock( &mutex );
 				std::string total;
 				for( int i = 0; i < MAX_FILES;i++ ){
 					if( c->files[i] == fileName ){
@@ -161,7 +160,7 @@ void *serverHandler(void* data){
 						comms->msg = fileName + ":" + total;
 					}
 				}
-				
+				pthread_mutex_unlock( &mutex );
 			}
 		// send Return message to client
 		m = comms->msg.c_str();
@@ -277,7 +276,7 @@ void clientHandler(threadData* cData, std::string LIP){
 		for( int i = 0; i < f_threads; i++)
 			pthread_join(cData->fileThreads[i],NULL);
 //	}
-	
+	pthread_exit(NULL);	
 }
 
 /*
@@ -294,7 +293,7 @@ void *peerToPeer(void* data){
 	const char* m = DEFAULT_MSG;
 	const char* ip = trans->ip.c_str();
 	std::string msg = GIVE_FILE;
-	msg += trans->fileName;
+	msg += ":" + trans->fileName;
 	if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0){
 		std::cerr << "Socket Creation Error" << std::endl;
 	}
@@ -314,6 +313,8 @@ void *peerToPeer(void* data){
 	file.open(trans->fileName, std::ios::out);
 	file << tokens.at(1) << "\n";
 	file.close();
+	std::cout << FILE_DOWNLOADED << std::endl;
+	close(sock);
 	pthread_exit(NULL);
 }
 
@@ -391,7 +392,7 @@ void* clientProcess(void* data){
 	std::vector<std::string> tokens = readBuffer(info->buffer);
 	std::cout << "Leader IP: " << info->buffer << std::endl;
 	close(server_fd);
-	//TODO: function which will communicate with leader node
+
 	clientHandler(info, tokens.at(0));
 
 	pthread_exit(NULL);
@@ -402,7 +403,7 @@ void* clientProcess(void* data){
  * by receiving messages from all other nodes containg
  * the nodes id and electing a leader.
  */
-void decideLeader(addrInfo* ips){
+void run(addrInfo* ips){
 	pthread_t threads[NUM_THREADS];
 	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 	pthread_attr_t attr;
@@ -462,5 +463,5 @@ void printIPs(addrInfo* info){
 
 int main(int argc,char** argv) {
 	addrInfo* info = commandArgs(argc,argv);
-	decideLeader(info);
+	run(info);
 }
