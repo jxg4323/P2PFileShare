@@ -21,6 +21,7 @@
 #define COMM_PORT 12000
 #define MAX_CLIENTS 1024
 #define NUM_THREADS 2
+#define ID "ID"
 #define CHANGE_ID "CHANGE ID"
 #define GOOD_ID "GOOD_ID"
 #define WANT_FILE "WANT"

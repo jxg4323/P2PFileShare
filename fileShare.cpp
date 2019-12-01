@@ -43,6 +43,25 @@ void generateID(){
 	while((result = ((rand()%MAX_NUM_NODES)+1)) == check){}	
 	node_id = result;
 }
+/*
+ * Looks through the mapping of clients and files
+ * that the server has and checks to see if any 
+ * of the clients have the file.
+ * Return 0 for FILE_NOT_FOUND
+ * Return Client ID if file is found
+ */
+int findFile(serverData* sData, std::string file){
+	int result = 0;
+	std::map<int,clientFileData*>::iterator it;
+	for( it = sData->nodeInfo.begin(); it != sData->nodeInfo.end(); it++){
+		for( int i = 0; i < MAX_FILES; i++){
+			std::string cmp = it->second->files[i];
+			if( cmp.find(file) != std::string::npos )
+				result = it->first;	
+		}	
+	}
+	return result;	
+}
 
 /*
  * This function will deal with message received
@@ -51,43 +70,54 @@ void generateID(){
 void *serverHandler(void* data){
 	commData* comms = (commData*)data;
 	comms->msg = DEFAULT_MSG;
-	read(comms->conn_fd,comms->buffer, BUFFER_SIZE);	
-	std::vector<std::string> tokens = readBuffer(comms->buffer);
-	clientFileData* cData;
-	const char* m;
-	std::cout << "SERVER RECVEIVED" << std::endl;
-	// ID Check
-	if( tokens.size() > 1 && am_leader == UNDECIDED ){
-		int cid = std::stoi(tokens.at(1));
-		// Check to confirm the client id is unique if not exit
-		if( checkID(comms->sData,cid) == false ){
-			comms->msg = CHANGE_ID;
-		}else{
-			comms->msg = GOOD_ID;
-			cData = clientInfo(tokens);
-			cData->ip = comms->con_client_addr;
-			// only add once it is clear no other cids have the id
-			comms->sData->nodeInfo.insert(std::pair<int,clientFileData*>(cid,cData));	
-			std::pair<int,clientFileData*> leader = *(comms->sData->nodeInfo.begin());
-			if(comms->sData->nodeInfo.size() == comms->totalClients){
-				leaderIP = leader.second->ip;
-				if( node_id == leader.first ){ // This is the leader node
-					am_leader = YES_LEADER;
-				}else{
-					am_leader = NOT_LEADER;
+	while(1){
+		memset( comms->buffer, '\0', sizeof(char)*BUFFER_SIZE );
+		read(comms->conn_fd,comms->buffer, BUFFER_SIZE);	
+		std::vector<std::string> tokens = readBuffer(comms->buffer);
+		clientFileData* cData;
+		const char* m;
+		// ID Check
+		if( tokens.at(0) == ID && am_leader == UNDECIDED ){
+			int cid = std::stoi(tokens.at(1));
+			// Check to confirm the client id is unique if not exit
+			if( checkID(comms->sData,cid) == false ){
+				comms->msg = CHANGE_ID;
+			}else{
+				comms->msg = GOOD_ID;
+				std::cout << comms->buffer << std::endl;
+				cData = clientInfo(tokens);
+				cData->ip = comms->con_client_addr;
+				// only add once it is clear no other cids have the id
+				comms->sData->nodeInfo.insert(std::pair<int,clientFileData*>(cid,cData));	
+				std::pair<int,clientFileData*> leader = *(comms->sData->nodeInfo.begin());
+				if(comms->sData->nodeInfo.size() == comms->totalClients){
+					leaderIP = leader.second->ip;
+					if( node_id == leader.first ){ // This is the leader node
+						am_leader = YES_LEADER;
+					}else{
+						am_leader = NOT_LEADER;
+					}
 				}
 			}
-		}
-	}else if( am_leader == YES_LEADER ){ // Leader Duties
-
-	}else if( am_leader == NOT_LEADER ){ // non leader duties
-
-	}
+		}else if( am_leader == YES_LEADER ){ // Leader Duties
+			std::cout << "SERVER REACHS HERE" << std::endl;
+			if( tokens.at(0) == WANT_FILE ){
+				std::map<int,clientFileData*>::iterator it;
+				std::string file = tokens.at(1);
+				int key = findFile(comms->sData,file);
+				it = comms->sData->nodeInfo.find(key);
+				comms->msg = it->second->ip;
+				comms->msg += ":" + COMM_PORT;	
+			} 
 	
-	// send Return message to client
-	m = comms->msg.c_str();
-	comms->conn_fd;
-	send(comms->conn_fd,m,strlen(m),0);
+		}else if( am_leader == NOT_LEADER ){ // non leader duties
+	
+		}
+		// send Return message to client
+		m = comms->msg.c_str();
+		comms->conn_fd;
+		send(comms->conn_fd,m,strlen(m),0);
+	}
 }
 
 /*
@@ -171,15 +201,17 @@ void clientHandler(threadData* cData){
 	if(inet_pton(AF_INET, ip, &serv_addr.sin_addr)<0){
 		std::cerr << "Invalid address/ Address not supported" << std::endl;
 	}
+	std::cout << "CLIENT REACHS HERE "<< ip << std::endl;
 	// continue trying to connect to ip
 	while(connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr))<=0){}
 	//TODO: insert function to talk with user
 	cData->message = "WANT:power";
 	msg = cData->message.c_str();
+	std::cout << "Client tells leader " << cData->message <<std::endl;
 	send(sock,msg,strlen(msg),0);
 	valread = read(sock,cData->buffer,BUFFER_SIZE);
 	std::vector<std::string> tokens = readBuffer(cData->buffer);
-
+	std::cout << cData->buffer << std::endl;
 //	}
 	
 }
@@ -241,9 +273,15 @@ void* clientProcess(void* data){
 				generateID();
 		}
 	}
-	std::cout << "Notified Everyone" << std::endl;
+	std::cout << "Notified Everyone am_leader: " << am_leader << std::endl;
 	//TODO: function which will communicate with leader node
-	clientHandler(info);
+	//clientHandler(info);
+	info->message = "WANT:power";
+	m = info->message.c_str();
+	send(sock,m,strlen(m),0);
+	valread = read(sock,info->buffer,BUFFER_SIZE);
+	std::cout << info->buffer << std::endl;
+
 	pthread_exit(NULL);
 }
 
