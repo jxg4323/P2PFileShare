@@ -99,7 +99,6 @@ void *serverHandler(void* data){
 			leaderIP = leader.second->ip;
 			if( node_id == leader.first ){ // This is the leader node
 				am_leader = YES_LEADER;
-				printClientInfo(comms->sData);
 			}else{
 				am_leader = NOT_LEADER;
 			}
@@ -107,7 +106,7 @@ void *serverHandler(void* data){
 		pthread_mutex_unlock( &mutex );
 		if( tokens.size() > 0 ){	
 			// ID Check
-			if( tokens.at(0) == ID && am_leader == UNDECIDED ){
+			if( tokens.at(0) == ID ){
 				int cid = std::stoi(tokens.at(1));
 				pthread_mutex_lock( &mutex );
 				// Check to confirm the client id is unique if not exit
@@ -138,6 +137,7 @@ void *serverHandler(void* data){
 					am_leader == YES_LEADER;
 				}else
 					am_leader == NOT_LEADER;
+				printClientInfo(comms->sData);
 				comms->msg = leader.second->ip;
 				pthread_mutex_unlock( &mutex );	
 			}else if( tokens.at(0) == GIVE_FILE ){ // non leader duties
@@ -230,9 +230,6 @@ void* leaderProcess(void* data){
 		pthread_detach(info->commThreads[clientNum]);	
 		pthread_mutex_unlock( &mutex );
 		clientNum++;
-		for( int i = 0; i < clientNum; i++){
-			pthread_join(info->commThreads[i],NULL);
-		}
 	}
 	close(server_fd);
 	pthread_exit(NULL);
@@ -242,6 +239,7 @@ void* leaderProcess(void* data){
  * and leader node.
  */
 void clientHandler(threadData* cData, std::string LIP){
+	pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 	struct sockaddr_in address;
 	int sock = 0, valread, server_fd, new_socket, opt = 1, f_threads = 0;
 	int addrlen = sizeof(address);
@@ -271,7 +269,9 @@ void clientHandler(threadData* cData, std::string LIP){
 		trans->ip = tokens.at(0);
 		
 		std::cout << "Buffer: " << cData->buffer << std::endl;
+		pthread_mutex_lock( &mutex );
 		pthread_create(&(cData->fileThreads[f_threads]),NULL, peerToPeer, (void*)trans);
+		pthread_mutex_unlock( &mutex );
 		f_threads++;
 		for( int i = 0; i < f_threads; i++)
 			pthread_join(cData->fileThreads[i],NULL);
@@ -305,7 +305,7 @@ void *peerToPeer(void* data){
 	// continue trying to connect to ip
 	if(connect(sock, (struct sockaddr*)&serv_addr, sizeof(serv_addr))<=0){}
 	m = msg.c_str();
-	std::cout << "PEER TO PEER GETS CALLED: " << msg << std::endl;
+	std::cout << "Clients reachs out to another client with: " << msg << std::endl;
 	send(sock,m,strlen(m),0);
 	valread = read(sock,buffer,BUFFER_SIZE);
 	std::vector<std::string> tokens = readBuffer(buffer);
