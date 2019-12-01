@@ -71,6 +71,7 @@ int node_id,am_leader(UNDECIDED);
 std::string leaderIP;
 
 int findFile(serverData*,std::string);
+void setupFiles(threadData*,std::string[]);
 bool checkID(serverData*,int);
 /*
  * Function to handle communication with server and client.
