@@ -18,6 +18,8 @@
 #include <map>
 #include <utility>
 #include <sys/socket.h>
+#include <sys/file.h>
+
 #define COMM_PORT 12000
 #define MAX_CLIENTS 1024
 #define NUM_THREADS 2
@@ -32,6 +34,7 @@
 #define DEFAULT_MSG "SERVER MSG"
 #define MAX_NUM_NODES 4096
 #define FILE_NAME_OPTIONS "[witch,wizard,elf,dwarf,human,ring,power,magic,evil,good]"
+#define WELCOME "Welcome to the SimP2P File Share System!"
 #define INPUT_STRING "What file would you like?(type a name from above)"
 #define MAX_FILES 5
 #define MAX_NAMES 10
@@ -51,6 +54,7 @@ typedef struct clientFileData{
 typedef struct serverData{
 	std::string serv_msg;
 	int totalClients;
+	bool printed;
 	pthread_t commThreads[MAX_CLIENTS];
 	std::map<int,clientFileData*> nodeInfo;
 }serverData;
@@ -66,7 +70,7 @@ typedef struct threadData{
 
 typedef struct commData{
 	std::string msg;
-	int totalClients;
+	int totalClients,leader,my_id;
 	int conn_fd;
 	char con_client_addr[INET_ADDRSTRLEN];
 	char buffer[BUFFER_SIZE];
@@ -76,14 +80,13 @@ typedef struct fileTransData{
 	std::string ip;
 	std::string fileName;
 }fileTransData;
-int node_id,am_leader(UNDECIDED);
-std::string leaderIP;
+int node_id,am_leader;
 
 void *peerToPeer(void*);
-void printClientInfo(serverData*);
-int findFile(serverData*,std::string);
+void printClientInfo(std::map<int,clientFileData*>);
+int findFile(std::map<int,clientFileData*>,std::string);
 void setupFiles(threadData*,std::string[]);
-bool checkID(serverData*,int);
+bool checkID(std::map<int,clientFileData*>,int);
 /*
  * Function to handle communication with server and client.
  */
